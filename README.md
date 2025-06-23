@@ -58,7 +58,7 @@ As someone who loves journaling but often struggles to type long entries, I want
 ## **📥 Want to Contribute?**  
 Feel free to **fork, open issues, or suggest features**! I’d love your feedback.  
 
-💖 **Built with love by [Simi](https://github.com/yourusername)** (your friendly neighborhood tech girl!)  
+💖 **Built with love by [Simi]((https://github.com/I-amour )** (your friendly neighborhood tech girl!)  
 
 ---  
 
