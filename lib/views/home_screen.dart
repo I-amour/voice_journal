@@ -6,10 +6,12 @@ import 'package:permission_handler/permission_handler.dart';
 import '../services/auth_services.dart';
 import '../services/sentiment_service.dart';
 import '../models/journal_entry.dart';
+import 'mood_stats_screen.dart';
 import 'dart:async';
 import 'dart:io' show Platform;
 import '../services/journal_service.dart';
 import 'package:flutter/foundation.dart';
+
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -1010,66 +1012,17 @@ Future<void> _deleteEntry(int index) async {
 }
 
   void _showStats() {
-    showDialog(
-      context: context,
-      builder: (context) => Dialog(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
-        ),
-        child: Container(
-          padding: const EdgeInsets.all(24),
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              colors: [_primaryColor.withOpacity(0.1), _accentColor.withOpacity(0.1)],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
-            borderRadius: BorderRadius.circular(20),
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                Icons.analytics_rounded,
-                color: _primaryColor,
-                size: 48,
-              ),
-              const SizedBox(height: 16),
-              Text(
-                'Journal Analytics',
-                style: TextStyle(
-                  color: _textPrimaryColor,
-                  fontSize: 24,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Detailed insights and statistics coming soon!',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: _textSecondaryColor,
-                  fontSize: 16,
-                ),
-              ),
-              const SizedBox(height: 20),
-              ElevatedButton(
-                onPressed: () => Navigator.pop(context),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: _primaryColor,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 12),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  elevation: 0,
-                ),
-                child: const Text('Got it'),
-              ),
-            ],
-          ),
-        ),
+  Navigator.push(
+    context,
+    MaterialPageRoute(
+      builder: (context) => MoodStatsScreen(
+        entries: _entries,
+        primaryColor: _primaryColor,
+        accentColor: _accentColor,
+        textPrimaryColor: _textPrimaryColor,
+        textSecondaryColor: _textSecondaryColor,
       ),
-    );
-  }
+    ),
+  );
+}
 }
