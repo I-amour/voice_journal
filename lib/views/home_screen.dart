@@ -1,5 +1,5 @@
 // ignore_for_file: unused_import
-
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter/material.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'package:permission_handler/permission_handler.dart';
@@ -28,7 +28,7 @@ class HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   bool _isProcessing = false;
   String _text = '';
   String _status = 'Tap microphone to speak or type below';
-  List<JournalEntry> _entries = [];
+  final List<JournalEntry> _entries = [];
   double _confidenceLevel = 0.0;
   bool _showTextInput = false;
 
@@ -703,7 +703,7 @@ void _listen() async {
                                         ),
                                       ],
                                     ),
-                                    if (entry.confidence != null && entry.confidence! < 1.0)
+                                    if (entry.confidence < 1.0)
                                       Container(
                                         margin: const EdgeInsets.only(top: 8),
                                         height: 2,

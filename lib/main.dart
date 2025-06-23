@@ -7,14 +7,17 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'views/home_screen.dart'; 
 import 'views/auth_screens/register_screen.dart'; 
 import 'package:flutter_dotenv/flutter_dotenv.dart';
-
+import 'dart:io';
 
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  print('Current directory: ${Directory.current.path}');
+  await dotenv.load(fileName: ".env");
   await Firebase.initializeApp();
   runApp(const MyApp());
 }
+
 
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
