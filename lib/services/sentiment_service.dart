@@ -1,10 +1,11 @@
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 class SentimentService {
   // Hugging Face API key - get yours at https://huggingface.co/settings/tokens
-  final String _apiKey = const String.fromEnvironment('HUGG_API_KEY');
+  final String _apiKey = dotenv.env['HUGG_API_KEY'] ?? '';
   final String _model = 'finiteautomata/bertweet-base-sentiment-analysis';
 
   Future<String> analyzeSentiment(String text) async {

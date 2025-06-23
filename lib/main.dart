@@ -4,6 +4,7 @@ import 'views/auth_screens/login_screen.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'views/home_screen.dart'; 
 import 'views/auth_screens/register_screen.dart'; 
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 
 
