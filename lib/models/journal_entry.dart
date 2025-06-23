@@ -14,23 +14,23 @@ class JournalEntry {
     required this.confidence,
   });
 
-  factory JournalEntry.fromMap(Map<String, dynamic> map) {
-    return JournalEntry(
-      text: map['text'] ?? '',
-      mood: map['mood'] ?? 'neutral',
-      date: (map['date'] as Timestamp).toDate(),
-      confidence: (map['confidence'] ?? 0.0).toDouble(),
-    );
-  }
+Map<String, dynamic> toMap() {
+  return {
+    'text': text,
+    'mood': mood,
+    'date': Timestamp.fromDate(date),
+    'confidence': confidence,
+  };
+}
 
-  Map<String, dynamic> toMap() {
-    return {
-      'text': text,
-      'mood': mood,
-      'date': Timestamp.fromDate(date),
-      'confidence': confidence,
-    };
-  }
+factory JournalEntry.fromMap(Map<String, dynamic> map) {
+  return JournalEntry(
+    text: map['text'] ?? '',
+    mood: map['mood'] ?? 'neutral',
+    date: (map['date'] as Timestamp).toDate(),
+    confidence: (map['confidence'] ?? 0.0).toDouble(),
+  );
+}
 
   Color get moodColor {
     switch (mood.toLowerCase()) {

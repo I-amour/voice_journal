@@ -51,6 +51,10 @@ Future<User?> signInWithGoogle() async {
     }
   }
 
+  String? getCurrentUserId() {
+  return _auth.currentUser?.uid;
+}
+
   // Simplified sign out
   Future<void> signOut() async {
     await _auth.signOut();

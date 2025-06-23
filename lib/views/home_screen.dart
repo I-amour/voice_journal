@@ -8,6 +8,8 @@ import '../services/sentiment_service.dart';
 import '../models/journal_entry.dart';
 import 'dart:async';
 import 'dart:io' show Platform;
+import '../services/journal_service.dart';
+import 'package:flutter/foundation.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -20,6 +22,7 @@ class HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   final AuthService _auth = AuthService();
   final stt.SpeechToText _speech = stt.SpeechToText();
   final SentimentService _sentiment = SentimentService();
+  final JournalService _journalService = JournalService(); 
   final TextEditingController _textController = TextEditingController();
   final FocusNode _textFocusNode = FocusNode();
 
@@ -28,7 +31,7 @@ class HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   bool _isProcessing = false;
   String _text = '';
   String _status = 'Tap microphone to speak or type below';
-  final List<JournalEntry> _entries = [];
+  List<JournalEntry> _entries = [];
   double _confidenceLevel = 0.0;
   bool _showTextInput = false;
 
@@ -60,7 +63,27 @@ class HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     super.initState();
     _initSpeech();
     _initAnimations();
+   _loadEntries(); // Add this line
+}
+
+Future<void> _loadEntries() async {
+  try {
+    final userId = _auth.getCurrentUserId();
+    if (userId == null) return;
+
+    _journalService.getEntries(userId).listen((entries) {
+      if (mounted) {
+        setState(() {
+          _entries = entries; // Now this works
+        });
+      }
+    });
+  } catch (e) {
+    if (kDebugMode) {
+      print('Error loading entries: $e');
+    }
   }
+}
 
   void _initAnimations() {
     _pulseController = AnimationController(
@@ -316,37 +339,49 @@ void _listen() async {
   }
 
   Future<void> _analyzeAndSaveEntry() async {
-    try {
-      setState(() => _isProcessing = true);
+  try {
+    setState(() => _isProcessing = true);
 
-      if (_text.trim().isEmpty) {
-        _updateStatus('No content to analyze');
-        return;
-      }
-
-      _updateStatus('Analyzing...');
-      final mood = await _sentiment.analyzeSentiment(_text);
-
-      setState(() {
-        _entries.insert(
-          0,
-          JournalEntry(
-            text: _text,
-            mood: mood,
-            date: DateTime.now(),
-            confidence: _confidenceLevel,
-          ),
-        );
-        _text = '';
-        _confidenceLevel = 0.0;
-        _updateStatus('Entry saved successfully');
-      });
-    } catch (e) {
-      _updateStatus('Analysis failed: ${e.toString()}');
-    } finally {
-      setState(() => _isProcessing = false);
+    if (_text.trim().isEmpty) {
+      _updateStatus('No content to analyze');
+      return;
     }
+
+    _updateStatus('Analyzing...');
+    final mood = await _sentiment.analyzeSentiment(_text);
+    
+    // Create the entry
+    final entry = JournalEntry(
+      text: _text,
+      mood: mood,
+      date: DateTime.now(),
+      confidence: _confidenceLevel,
+    );
+
+    // Get current user ID
+    final userId = _auth.getCurrentUserId();
+    if (userId == null) {
+      _updateStatus('Not authenticated - please sign in again');
+      return;
+    }
+
+    // Save to Firebase
+    await _journalService.saveEntry(entry, userId);
+
+    // Update UI
+    setState(() {
+      _entries.insert(0, entry);
+      _text = '';
+      _confidenceLevel = 0.0;
+      _updateStatus('Entry saved successfully');
+    });
+
+  } catch (e) {
+    _updateStatus('Failed to save entry: ${e.toString()}');
+  } finally {
+    setState(() => _isProcessing = false);
   }
+}
 
   Widget _buildRecordingFAB() {
     return Container(
@@ -953,11 +988,26 @@ void _listen() async {
     return '${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')} • ${date.day}/${date.month}/${date.year}';
   }
 
-  void _deleteEntry(int index) {
-    setState(() {
-      _entries.removeAt(index);
-    });
+Future<void> _deleteEntry(int index) async {
+  try {
+    final entry = _entries[index];
+    final userId = _auth.getCurrentUserId();
+    if (userId == null) return;
+
+    await _journalService.deleteEntry(entry, userId);
+
+    if (mounted) {
+      setState(() {
+        _entries.removeAt(index);
+      });
+    }
+  } catch (e) {
+    if (kDebugMode) {
+      print('Error deleting entry: $e');
+    }
+    _updateStatus('Failed to delete entry');
   }
+}
 
   void _showStats() {
     showDialog(
