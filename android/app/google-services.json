@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "1035142586824",
+    "project_id": "voice-journal-94069",
+    "storage_bucket": "voice-journal-94069.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1035142586824:android:cc40ae7b01cda2c19120fd",
+        "android_client_info": {
+          "package_name": "com.example.voice_journal"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAGQvQUmCnp0qGw8X8wXNXy07X_jaXd-vg"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
