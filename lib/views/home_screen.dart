@@ -12,13 +12,13 @@ import 'dart:io' show Platform;
 import '../services/journal_service.dart';
 import 'package:flutter/foundation.dart';
 
-
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
   @override
   State<HomeScreen> createState() => HomeScreenState();
 }
+
 
 class HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   final AuthService _auth = AuthService();
@@ -27,6 +27,8 @@ class HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   final JournalService _journalService = JournalService(); 
   final TextEditingController _textController = TextEditingController();
   final FocusNode _textFocusNode = FocusNode();
+  Set<int> _expandedEntries = <int>{};
+  static const int _maxLinesPreview = 3;
 
   bool _isListening = false;
   bool _speechAvailable = false;
@@ -36,8 +38,9 @@ class HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   List<JournalEntry> _entries = [];
   double _confidenceLevel = 0.0;
   bool _showTextInput = false;
-
-  // Add these new variables for continuous recording
+  bool _isEditing = false;
+  int? _editingIndex;
+  String? _editingEntryId;
   Timer? _speechTimer;
   bool _shouldContinueListening = false;
   String _accumulatedText = '';
@@ -65,27 +68,27 @@ class HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     super.initState();
     _initSpeech();
     _initAnimations();
-   _loadEntries(); // Add this line
-}
+    _loadEntries(); // Add this line
+  }
 
-Future<void> _loadEntries() async {
-  try {
-    final userId = _auth.getCurrentUserId();
-    if (userId == null) return;
+  Future<void> _loadEntries() async {
+    try {
+      final userId = _auth.getCurrentUserId();
+      if (userId == null) return;
 
-    _journalService.getEntries(userId).listen((entries) {
-      if (mounted) {
-        setState(() {
-          _entries = entries; // Now this works
-        });
+      _journalService.getEntries(userId).listen((entries) {
+        if (mounted) {
+          setState(() {
+            _entries = entries; // Now this works
+          });
+        }
+      });
+    } catch (e) {
+      if (kDebugMode) {
+        print('Error loading entries: $e');
       }
-    });
-  } catch (e) {
-    if (kDebugMode) {
-      print('Error loading entries: $e');
     }
   }
-}
 
   void _initAnimations() {
     _pulseController = AnimationController(
@@ -114,8 +117,162 @@ Future<void> _loadEntries() async {
     _fadeController.forward();
   }
 
+  void _showFullEntryDialog(JournalEntry entry, int index) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return Dialog(
+          backgroundColor: _surfaceColor,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(24),
+          ),
+          child: Container(
+            constraints: BoxConstraints(
+              maxHeight: MediaQuery.of(context).size.height * 0.8,
+              maxWidth: MediaQuery.of(context).size.width * 0.9,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Header
+                Container(
+                  padding: const EdgeInsets.all(24),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [entry.moodColor, entry.moodColor.withOpacity(0.7)],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    borderRadius: const BorderRadius.only(
+                      topLeft: Radius.circular(24),
+                      topRight: Radius.circular(24),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      _moodIcon(entry.mood),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Journal Entry',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 20,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            Text(
+                              '${entry.mood.capitalize()} • ${_formatDate(entry.date)}',
+                              style: TextStyle(
+                                color: Colors.white.withOpacity(0.9),
+                                fontSize: 14,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      IconButton(
+                        onPressed: () => Navigator.of(context).pop(),
+                        icon: const Icon(
+                          Icons.close_rounded,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                
+                // Content
+                Flexible(
+                  child: SingleChildScrollView(
+                    child: Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // Full entry text
+                          Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.all(20),
+                            decoration: BoxDecoration(
+                              color: _backgroundColor,
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(
+                                color: entry.moodColor.withOpacity(0.2),
+                                width: 1,
+                              ),
+                            ),
+                            child: Text(
+                              entry.text,
+                              style: TextStyle(
+                                color: _textPrimaryColor,
+                                fontSize: 16,
+                                height: 1.6,
+                              ),
+                            ),
+                          ),
+                          
+                          const SizedBox(height: 24),
+                          
+                          // Action buttons
+                          Row(
+                            children: [
+                              Expanded(
+                                child: OutlinedButton.icon(
+                                  onPressed: () {
+                                    Navigator.of(context).pop();
+                                    _showEditDialog(entry, index);
+                                  },
+                                  icon: const Icon(Icons.edit_rounded, size: 20),
+                                  label: const Text('Edit Entry'),
+                                  style: OutlinedButton.styleFrom(
+                                    foregroundColor: _primaryColor,
+                                    side: BorderSide(color: _primaryColor.withOpacity(0.3)),
+                                    padding: const EdgeInsets.symmetric(vertical: 16),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: ElevatedButton.icon(
+                                  onPressed: () => Navigator.of(context).pop(),
+                                  icon: const Icon(Icons.check_rounded, size: 20),
+                                  label: const Text('Done'),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: _primaryColor,
+                                    foregroundColor: Colors.white,
+                                    padding: const EdgeInsets.symmetric(vertical: 16),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    elevation: 0,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+
   @override
-void dispose() {
+  void dispose() {
     _textController.dispose();
     _textFocusNode.dispose();
     _pulseController.dispose();
@@ -124,7 +281,343 @@ void dispose() {
     super.dispose();
   }
 
-Future<void> _initSpeech() async {
+  void _showEditDialog(JournalEntry entry, int index) {
+  final TextEditingController editController = TextEditingController(text: entry.text);
+  final FocusNode focusNode = FocusNode();
+
+  showDialog(
+    context: context,
+    barrierDismissible: false,
+    builder: (BuildContext context) {
+      return WillPopScope(
+        onWillPop: () async {
+          editController.dispose();
+          focusNode.dispose();
+          return true;
+        },
+        child: Dialog(
+          backgroundColor: _surfaceColor,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(24),
+          ),
+          child: Container(
+            constraints: BoxConstraints(
+              maxHeight: MediaQuery.of(context).size.height * 0.8,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Header
+                Container(
+                  padding: const EdgeInsets.all(24),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [_primaryColor, _accentColor],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    borderRadius: const BorderRadius.only(
+                      topLeft: Radius.circular(24),
+                      topRight: Radius.circular(24),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(
+                        Icons.edit_rounded,
+                        color: Colors.white,
+                        size: 24,
+                      ),
+                      const SizedBox(width: 12),
+                      const Text(
+                        'Edit Journal Entry',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 20,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const Spacer(),
+                      IconButton(
+                        onPressed: () {
+                          Navigator.of(context).pop();
+                        },
+                        icon: const Icon(
+                          Icons.close_rounded,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                
+                // Content
+                Flexible(
+                  child: SingleChildScrollView(
+                    child: Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // Original entry info
+                          Container(
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: _backgroundColor,
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: entry.moodColor.withOpacity(0.3),
+                                width: 1,
+                              ),
+                            ),
+                            child: Row(
+                              children: [
+                                _moodIcon(entry.mood),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      const Text(
+                                        'Original Entry',
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          color: _textSecondaryColor,
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                      Text(
+                                        '${entry.mood.capitalize()} • ${_formatDate(entry.date)}',
+                                        style: const TextStyle(
+                                          fontSize: 14,
+                                          color: _textPrimaryColor,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          
+                          const SizedBox(height: 20),
+                          
+                          // Edit text field
+                          const Text(
+                            'Edit your thoughts:',
+                            style: TextStyle(
+                              fontSize: 16,
+                              color: _textPrimaryColor,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          Container(
+                            decoration: BoxDecoration(
+                              color: _backgroundColor,
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(
+                                color: _primaryColor.withOpacity(0.2),
+                                width: 2,
+                              ),
+                            ),
+                            child: TextField(
+                              controller: editController,
+                              focusNode: focusNode,
+                              maxLines: 8,
+                              minLines: 4,
+                              autofocus: true,
+                              style: const TextStyle(
+                                color: _textPrimaryColor,
+                                fontSize: 16,
+                                height: 1.5,
+                              ),
+                              decoration: const InputDecoration(
+                                hintText: 'Update your thoughts...',
+                                hintStyle: TextStyle(
+                                  color: _textSecondaryColor,
+                                  fontSize: 16,
+                                ),
+                                border: InputBorder.none,
+                                contentPadding: EdgeInsets.all(20),
+                              ),
+                            ),
+                          ),
+                          
+                          const SizedBox(height: 24),
+                          
+                          // Action buttons
+                          Row(
+                            children: [
+                              Expanded(
+                                child: OutlinedButton(
+                                  onPressed: () {
+                                    Navigator.of(context).pop();
+                                  },
+                                  style: OutlinedButton.styleFrom(
+                                    foregroundColor: _textSecondaryColor,
+                                    side: BorderSide(color: _textSecondaryColor.withOpacity(0.3)),
+                                    padding: const EdgeInsets.symmetric(vertical: 16),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                  ),
+                                  child: const Text('Cancel'),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: ElevatedButton(
+                                  onPressed: () async {
+                                    if (editController.text.trim().isEmpty) {
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        SnackBar(
+                                          content: const Text('Entry cannot be empty'),
+                                          backgroundColor: _negativeColor,
+                                          behavior: SnackBarBehavior.floating,
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius: BorderRadius.circular(12),
+                                          ),
+                                        ),
+                                      );
+                                      return;
+                                    }
+                                    
+                                    Navigator.of(context).pop();
+                                    await _updateEntry(entry, editController.text.trim(), index);
+                                  },
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: _primaryColor,
+                                    foregroundColor: Colors.white,
+                                    padding: const EdgeInsets.symmetric(vertical: 16),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    elevation: 0,
+                                  ),
+                                  child: const Row(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Icon(Icons.save_rounded, size: 20),
+                                      SizedBox(width: 8),
+                                      Text('Save Changes'),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    },
+  ).then((_) {
+    // Dispose controllers when dialog is closed
+    editController.dispose();
+    focusNode.dispose();
+  });
+}
+
+  // Add this new method to handle updating entries:
+  Future<void> _updateEntry(JournalEntry originalEntry, String newText, int index) async {
+    try {
+      setState(() {
+        _isEditing = true;
+        _editingIndex = index;
+      });
+
+      _updateStatus('Analyzing updated entry...');
+
+      // Analyze sentiment of the updated text
+      final newMood = await _sentiment.analyzeSentiment(newText);
+      
+      // Create updated entry
+      final updatedEntry = JournalEntry(
+        text: newText,
+        mood: newMood,
+        date: originalEntry.date, // Keep original date
+        confidence: 1.0, // High confidence for manually edited text
+      );
+
+      // Get current user ID
+      final userId = _auth.getCurrentUserId();
+      if (userId == null) {
+        _updateStatus('Not authenticated - please sign in again');
+        return;
+      }
+
+      // Update in Firebase
+      await _journalService.updateEntry(originalEntry, updatedEntry, userId);
+
+      // Update local list
+      setState(() {
+        _entries[index] = updatedEntry;
+        _isEditing = false;
+        _editingIndex = null;
+      });
+
+      _updateStatus('Entry updated successfully');
+      
+      // Show success message
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Row(
+              children: [
+                Icon(Icons.check_circle_rounded, color: Colors.white),
+                SizedBox(width: 8),
+                Text('Entry updated successfully'),
+              ],
+            ),
+            backgroundColor: _positiveColor,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+          ),
+        );
+      }
+
+    } catch (e) {
+      _updateStatus('Failed to update entry: ${e.toString()}');
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Row(
+              children: [
+                Icon(Icons.error_rounded, color: Colors.white),
+                SizedBox(width: 8),
+                Text('Failed to update entry'),
+              ],
+            ),
+            backgroundColor: _negativeColor,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isEditing = false;
+          _editingIndex = null;
+        });
+      }
+    }
+  }
+
+  Future<void> _initSpeech() async {
     try {
       var status = await Permission.microphone.status;
       if (!status.isGranted) {
@@ -169,9 +662,7 @@ Future<void> _initSpeech() async {
     }
   }
 
-
-
-void _handleListeningEnd() {
+  void _handleListeningEnd() {
     if (!mounted) return;
 
     _speechTimer?.cancel();
@@ -192,8 +683,8 @@ void _handleListeningEnd() {
       if (mounted) {
         setState(() {
           _isProcessing = false;
-          _updateStatus('No speech detected - try speaking louder or closer to the microphone');
         });
+        _updateStatus('No speech detected - try speaking louder or closer to the microphone');
       }
     }
   }
@@ -205,7 +696,7 @@ void _handleListeningEnd() {
     debugPrint(message);
   }
 
-void _listen() async {
+  void _listen() async {
     if (!_speechAvailable) {
       _updateStatus('Speech not available');
       return;
@@ -227,8 +718,8 @@ void _listen() async {
       _text = '';
       _accumulatedText = '';
       _showTextInput = false;
-      _updateStatus('Listening... Speak now');
     });
+    _updateStatus('Listening... Speak now');
 
     _startListeningSession();
   }
@@ -312,15 +803,20 @@ void _listen() async {
     setState(() {
       _showTextInput = !_showTextInput;
       if (_showTextInput) {
-        _updateStatus('Type your journal entry below');
-        Future.delayed(const Duration(milliseconds: 100), () {
-          _textFocusNode.requestFocus();
-        });
+        _textFocusNode.requestFocus();
       } else {
-        _updateStatus('Tap microphone to speak or type below');
         _textFocusNode.unfocus();
       }
     });
+    
+    if (_showTextInput) {
+      _updateStatus('Type your journal entry below');
+      Future.delayed(const Duration(milliseconds: 100), () {
+        _textFocusNode.requestFocus();
+      });
+    } else {
+      _updateStatus('Tap microphone to speak or type below');
+    }
   }
 
   Future<void> _submitTextEntry() async {
@@ -341,49 +837,49 @@ void _listen() async {
   }
 
   Future<void> _analyzeAndSaveEntry() async {
-  try {
-    setState(() => _isProcessing = true);
+    try {
+      setState(() => _isProcessing = true);
 
-    if (_text.trim().isEmpty) {
-      _updateStatus('No content to analyze');
-      return;
-    }
+      if (_text.trim().isEmpty) {
+        _updateStatus('No content to analyze');
+        return;
+      }
 
-    _updateStatus('Analyzing...');
-    final mood = await _sentiment.analyzeSentiment(_text);
-    
-    // Create the entry
-    final entry = JournalEntry(
-      text: _text,
-      mood: mood,
-      date: DateTime.now(),
-      confidence: _confidenceLevel,
-    );
+      _updateStatus('Analyzing...');
+      final mood = await _sentiment.analyzeSentiment(_text);
+      
+      // Create the entry
+      final entry = JournalEntry(
+        text: _text,
+        mood: mood,
+        date: DateTime.now(),
+        confidence: _confidenceLevel,
+      );
 
-    // Get current user ID
-    final userId = _auth.getCurrentUserId();
-    if (userId == null) {
-      _updateStatus('Not authenticated - please sign in again');
-      return;
-    }
+      // Get current user ID
+      final userId = _auth.getCurrentUserId();
+      if (userId == null) {
+        _updateStatus('Not authenticated - please sign in again');
+        return;
+      }
 
-    // Save to Firebase
-    await _journalService.saveEntry(entry, userId);
+      // Save to Firebase
+      await _journalService.saveEntry(entry, userId);
 
-    // Update UI
-    setState(() {
-      _entries.insert(0, entry);
-      _text = '';
-      _confidenceLevel = 0.0;
+      // Update UI
+      setState(() {
+        _entries.insert(0, entry);
+        _text = '';
+        _confidenceLevel = 0.0;
+      });
       _updateStatus('Entry saved successfully');
-    });
 
-  } catch (e) {
-    _updateStatus('Failed to save entry: ${e.toString()}');
-  } finally {
-    setState(() => _isProcessing = false);
+    } catch (e) {
+      _updateStatus('Failed to save entry: ${e.toString()}');
+    } finally {
+      setState(() => _isProcessing = false);
+    }
   }
-}
 
   Widget _buildRecordingFAB() {
     return Container(
@@ -414,7 +910,7 @@ void _listen() async {
                     size: 28,
                   ),
                   if (_isListening)
-                    Text(
+                    const Text(
                       'TAP TO\nSTOP',
                       textAlign: TextAlign.center,
                       style: TextStyle(
@@ -476,7 +972,7 @@ void _listen() async {
         children: [
           Column(
             children: [
-              // Recording Indicator
+              // Recording Indicator (existing code)
               if (_isListening || _isProcessing)
                 Container(
                   margin: const EdgeInsets.all(16),
@@ -518,7 +1014,7 @@ void _listen() async {
                                       ),
                                     ] : [],
                                   ),
-                                  child: Icon(
+                                  child: const Icon(
                                     Icons.mic_rounded,
                                     color: Colors.white,
                                     size: 24,
@@ -541,14 +1037,14 @@ void _listen() async {
                                   child: LinearProgressIndicator(
                                     value: _confidenceLevel,
                                     backgroundColor: Colors.transparent,
-                                    valueColor: AlwaysStoppedAnimation<Color>(_primaryColor),
+                                    valueColor: const AlwaysStoppedAnimation<Color>(_primaryColor),
                                     borderRadius: BorderRadius.circular(2),
                                   ),
                                 ),
                                 const SizedBox(height: 8),
                                 Text(
                                   _isListening ? 'Listening...' : 'Processing...',
-                                  style: TextStyle(
+                                  style: const TextStyle(
                                     fontWeight: FontWeight.w600,
                                     color: _textPrimaryColor,
                                     fontSize: 16,
@@ -556,7 +1052,7 @@ void _listen() async {
                                 ),
                                 Text(
                                   _text.isEmpty ? 'Speak now...' : _text,
-                                  style: TextStyle(
+                                  style: const TextStyle(
                                     color: _textSecondaryColor,
                                     fontSize: 14,
                                   ),
@@ -569,7 +1065,7 @@ void _listen() async {
                           if (_isProcessing)
                             Container(
                               padding: const EdgeInsets.all(12),
-                              child: SizedBox(
+                              child: const SizedBox(
                                 width: 20,
                                 height: 20,
                                 child: CircularProgressIndicator(
@@ -594,12 +1090,12 @@ void _listen() async {
                           ),
                           child: Row(
                             children: [
-                              Icon(Icons.error_rounded, color: _negativeColor, size: 20),
+                              const Icon(Icons.error_rounded, color: _negativeColor, size: 20),
                               const SizedBox(width: 8),
                               Expanded(
                                 child: Text(
                                   _status,
-                                  style: TextStyle(color: _negativeColor),
+                                  style: const TextStyle(color: _negativeColor),
                                 ),
                               ),
                               TextButton(
@@ -617,7 +1113,7 @@ void _listen() async {
                   ),
                 ),
 
-              // Status Message
+              // Status Message (existing code)
               if (!(_isListening || _isProcessing))
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
@@ -632,7 +1128,7 @@ void _listen() async {
                   ),
                 ),
 
-              // Entries List
+              // Updated Entries List with truncation
               Expanded(
                 child: _entries.isEmpty
                     ? Center(
@@ -684,6 +1180,27 @@ void _listen() async {
                           itemCount: _entries.length,
                           itemBuilder: (context, index) {
                             final entry = _entries[index];
+                            final isBeingEdited = _isEditing && _editingIndex == index;
+                            final isExpanded = _expandedEntries.contains(index);
+                            
+                            // Check if text needs truncation
+                            final textSpan = TextSpan(
+                              text: entry.text,
+                              style: TextStyle(
+                                color: _textPrimaryColor,
+                                fontSize: 16,
+                                height: 1.5,
+                              ),
+                            );
+                            final textPainter = TextPainter(
+                              text: textSpan,
+                              textDirection: TextDirection.ltr,
+                              maxLines: _maxLinesPreview,
+                            );
+                            textPainter.layout(maxWidth: MediaQuery.of(context).size.width - 64);
+                            final isTextTruncated = textPainter.didExceedMaxLines;
+                            textPainter.dispose();
+
                             return Container(
                               margin: const EdgeInsets.only(bottom: 12),
                               decoration: BoxDecoration(
@@ -697,66 +1214,201 @@ void _listen() async {
                                   ),
                                 ],
                                 border: Border.all(
-                                  color: Colors.grey.withOpacity(0.1),
-                                  width: 1,
+                                  color: isBeingEdited 
+                                      ? _primaryColor.withOpacity(0.3)
+                                      : Colors.grey.withOpacity(0.1),
+                                  width: isBeingEdited ? 2 : 1,
                                 ),
                               ),
-                              child: Padding(
-                                padding: const EdgeInsets.all(16),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      entry.text,
-                                      style: TextStyle(
-                                        color: _textPrimaryColor,
-                                        fontSize: 16,
-                                        height: 1.5,
+                              child: Column(
+                                children: [
+                                  // Main content - tappable area for expansion
+                                  InkWell(
+                                    onTap: isBeingEdited ? null : () {
+                                      if (isTextTruncated) {
+                                        _showFullEntryDialog(entry, index);
+                                      }
+                                    },
+                                    borderRadius: BorderRadius.circular(16),
+                                    child: Padding(
+                                      padding: const EdgeInsets.all(16),
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          // Edit indicator
+                                          if (isBeingEdited)
+                                            Container(
+                                              margin: const EdgeInsets.only(bottom: 12),
+                                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                              decoration: BoxDecoration(
+                                                color: _primaryColor.withOpacity(0.1),
+                                                borderRadius: BorderRadius.circular(8),
+                                                border: Border.all(
+                                                  color: _primaryColor.withOpacity(0.3),
+                                                  width: 1,
+                                                ),
+                                              ),
+                                              child: Row(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  SizedBox(
+                                                    width: 12,
+                                                    height: 12,
+                                                    child: CircularProgressIndicator(
+                                                      strokeWidth: 2,
+                                                      valueColor: AlwaysStoppedAnimation<Color>(_primaryColor),
+                                                    ),
+                                                  ),
+                                                  const SizedBox(width: 6),
+                                                  Text(
+                                                    'Updating...',
+                                                    style: TextStyle(
+                                                      color: _primaryColor,
+                                                      fontSize: 12,
+                                                      fontWeight: FontWeight.w600,
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                          
+                                          // Entry text with truncation
+                                          Text(
+                                            entry.text,
+                                            style: TextStyle(
+                                              color: _textPrimaryColor,
+                                              fontSize: 16,
+                                              height: 1.5,
+                                            ),
+                                            maxLines: _maxLinesPreview,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                          
+                                          // "Tap to read more" indicator
+                                          if (isTextTruncated && !isBeingEdited)
+                                            Padding(
+                                              padding: const EdgeInsets.only(top: 8),
+                                              child: Row(
+                                                children: [
+                                                  Icon(
+                                                    Icons.touch_app_rounded,
+                                                    size: 16,
+                                                    color: _primaryColor,
+                                                  ),
+                                                  const SizedBox(width: 4),
+                                                  Text(
+                                                    'Tap to read full entry',
+                                                    style: TextStyle(
+                                                      color: _primaryColor,
+                                                      fontSize: 12,
+                                                      fontWeight: FontWeight.w500,
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                          
+                                          const SizedBox(height: 12),
+                                          
+                                          // Entry metadata
+                                          Row(
+                                            children: [
+                                              _moodIcon(entry.mood),
+                                              const SizedBox(width: 8),
+                                              Text(
+                                                '${entry.mood.capitalize()} • ${_formatDate(entry.date)}',
+                                                style: TextStyle(
+                                                  color: _textSecondaryColor,
+                                                  fontSize: 12,
+                                                  fontWeight: FontWeight.w500,
+                                                ),
+                                              ),
+                                              const Spacer(),
+                                            ],
+                                          ),
+                                          
+                                          // Confidence indicator
+                                          if (entry.confidence < 1.0)
+                                            Container(
+                                              margin: const EdgeInsets.only(top: 8),
+                                              height: 2,
+                                              decoration: BoxDecoration(
+                                                borderRadius: BorderRadius.circular(1),
+                                                color: Colors.grey[200],
+                                              ),
+                                              child: LinearProgressIndicator(
+                                                value: entry.confidence,
+                                                backgroundColor: Colors.transparent,
+                                                valueColor: AlwaysStoppedAnimation<Color>(_primaryColor),
+                                                borderRadius: BorderRadius.circular(1),
+                                              ),
+                                            ),
+                                        ],
                                       ),
                                     ),
-                                    const SizedBox(height: 12),
-                                    Row(
-                                      children: [
-                                        _moodIcon(entry.mood),
-                                        const SizedBox(width: 8),
-                                        Text(
-                                          '${entry.mood} • ${_formatDate(entry.date)}',
-                                          style: TextStyle(
-                                            color: _textSecondaryColor,
-                                            fontSize: 12,
-                                            fontWeight: FontWeight.w500,
+                                  ),
+                                  
+                                  // Action buttons row (always visible)
+                                  if (!isBeingEdited)
+                                    Container(
+                                      padding: const EdgeInsets.all(16),
+                                      decoration: BoxDecoration(
+                                        border: Border(
+                                          top: BorderSide(
+                                            color: Colors.grey.withOpacity(0.1),
+                                            width: 1,
                                           ),
-                                        ),
-                                        const Spacer(),
-                                        IconButton(
-                                          onPressed: () => _deleteEntry(index),
-                                          icon: Icon(
-                                            Icons.delete_outline_rounded,
-                                            color: _textSecondaryColor,
-                                            size: 20,
-                                          ),
-                                          padding: EdgeInsets.zero,
-                                          constraints: const BoxConstraints(),
-                                        ),
-                                      ],
-                                    ),
-                                    if (entry.confidence < 1.0)
-                                      Container(
-                                        margin: const EdgeInsets.only(top: 8),
-                                        height: 2,
-                                        decoration: BoxDecoration(
-                                          borderRadius: BorderRadius.circular(1),
-                                          color: Colors.grey[200],
-                                        ),
-                                        child: LinearProgressIndicator(
-                                          value: entry.confidence,
-                                          backgroundColor: Colors.transparent,
-                                          valueColor: AlwaysStoppedAnimation<Color>(_primaryColor),
-                                          borderRadius: BorderRadius.circular(1),
                                         ),
                                       ),
-                                  ],
-                                ),
+                                      child: Row(
+                                        children: [
+                                          Expanded(
+                                            child: OutlinedButton.icon(
+                                              onPressed: () => _showEditDialog(entry, index),
+                                              icon: Icon(
+                                                Icons.edit_outlined,
+                                                size: 18,
+                                                color: _primaryColor,
+                                              ),
+                                              label: Text(
+                                                'Edit',
+                                                style: TextStyle(color: _primaryColor),
+                                              ),
+                                              style: OutlinedButton.styleFrom(
+                                                side: BorderSide(color: _primaryColor.withOpacity(0.3)),
+                                                padding: const EdgeInsets.symmetric(vertical: 12),
+                                                shape: RoundedRectangleBorder(
+                                                  borderRadius: BorderRadius.circular(8),
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                          const SizedBox(width: 8),
+                                          Expanded(
+                                            child: OutlinedButton.icon(
+                                              onPressed: () => _deleteEntry(index),
+                                              icon: Icon(
+                                                Icons.delete_outline_rounded,
+                                                size: 18,
+                                                color: _negativeColor,
+                                              ),
+                                              label: Text(
+                                                'Delete',
+                                                style: TextStyle(color: _negativeColor),
+                                              ),
+                                              style: OutlinedButton.styleFrom(
+                                                side: BorderSide(color: _negativeColor.withOpacity(0.3)),
+                                                padding: const EdgeInsets.symmetric(vertical: 12),
+                                                shape: RoundedRectangleBorder(
+                                                  borderRadius: BorderRadius.circular(8),
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                ],
                               ),
                             );
                           },
@@ -766,7 +1418,7 @@ void _listen() async {
             ],
           ),
 
-          // Modern Text Input Overlay
+          // Text Input Overlay (existing code remains the same)
           if (_showTextInput)
             Positioned.fill(
               child: Container(
@@ -958,6 +1610,7 @@ void _listen() async {
     );
   }
 
+  
   Widget _moodIcon(String mood) {
     IconData icon;
     Color color;
@@ -975,6 +1628,8 @@ void _listen() async {
         icon = Icons.sentiment_neutral_rounded;
         color = _neutralColor;
     }
+
+    
 
     return Container(
       padding: const EdgeInsets.all(6),
@@ -1010,6 +1665,8 @@ Future<void> _deleteEntry(int index) async {
     _updateStatus('Failed to delete entry');
   }
 }
+
+
 
   void _showStats() {
   Navigator.push(

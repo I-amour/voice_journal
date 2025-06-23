@@ -32,6 +32,7 @@ factory JournalEntry.fromMap(Map<String, dynamic> map) {
   );
 }
 
+
   Color get moodColor {
     switch (mood.toLowerCase()) {
       case 'positive':
@@ -58,4 +59,5 @@ factory JournalEntry.fromMap(Map<String, dynamic> map) {
     return '${date.day}/${date.month}/${date.year} ${date.hour}:${date.minute.toString().padLeft(2, '0')}';
   }
 }
+
 

@@ -28,6 +28,41 @@ Future<void> deleteEntry(JournalEntry entry, String userId) async {
   }
 }
 
+Future<void> updateEntry(JournalEntry originalEntry, JournalEntry updatedEntry, String userId) async {
+  try {
+    // Query to find the document with matching content and timestamp
+    final querySnapshot = await FirebaseFirestore.instance
+        .collection('users')
+        .doc(userId)
+        .collection('entries')
+        .where('text', isEqualTo: originalEntry.text)
+        .where('mood', isEqualTo: originalEntry.mood)
+        .limit(1)
+        .get();
+
+    if (querySnapshot.docs.isNotEmpty) {
+      // Update the existing document
+      final docId = querySnapshot.docs.first.id;
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(userId)
+          .collection('entries')
+          .doc(docId)
+          .update({
+        'text': updatedEntry.text,
+        'mood': updatedEntry.mood,
+        'confidence': updatedEntry.confidence,
+        'updated_at': FieldValue.serverTimestamp(), // Track when it was updated
+      });
+    } else {
+      throw Exception('Entry not found for update');
+    }
+  } catch (e) {
+    throw Exception('Failed to update entry: $e');
+  }
+}
+
+
   Stream<List<JournalEntry>> getEntries(String userId) {
     return _firestore
         .collection('users')
